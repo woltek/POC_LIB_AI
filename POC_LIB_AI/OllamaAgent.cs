@@ -7,9 +7,10 @@ namespace POC_LIB_AI;
 /// <summary>
 /// Creates a Microsoft Agent Framework agent backed by a local Ollama model.
 /// </summary>
-public sealed class OllamaAgent
+public sealed class OllamaAgent : IDisposable
 {
     private readonly List<AgentSkillsProvider> _skillsProviders = [];
+    private bool _disposed;
 
     /// <summary>
     /// Creates an agent connected to an Ollama server.
@@ -90,15 +91,22 @@ public sealed class OllamaAgent
     public AIAgent Agent { get; }
 
     /// <summary>
-    /// Disposes the skill providers owned by this wrapper.
+    /// Releases the resources used by the skill providers.
     /// </summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         foreach (AgentSkillsProvider provider in _skillsProviders)
         {
             provider.Dispose();
         }
 
         _skillsProviders.Clear();
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }
