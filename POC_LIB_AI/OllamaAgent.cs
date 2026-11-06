@@ -1,34 +1,30 @@
+using System.Reflection;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OllamaSharp;
 
 namespace POC_LIB_AI;
 
-/// <summary>
-/// Creates a Microsoft Agent Framework agent backed by a local Ollama model.
-/// </summary>
+/// <summary>Creates a Microsoft Agent Framework agent backed by a local Ollama model.</summary>
 public sealed class OllamaAgent : IDisposable
 {
     private readonly List<AgentSkillsProvider> _skillsProviders = [];
     private bool _disposed;
 
-    /// <summary>
-    /// Creates an agent connected to an Ollama server.
-    /// </summary>
-    /// <param name="url">Base URL for the Ollama server, for example http://localhost:11434.</param>
-    /// <param name="modelName">The installed Ollama model name, for example qwen.</param>
-    /// <param name="skillFolders">Optional directories containing Agent Skills (with SKILL.md files).</param>
-    /// <param name="enableSkillScripts">
-    /// Enables execution of scripts included in file-based skills. Only enable this for trusted skill folders:
-    /// scripts run as local subprocesses and are not sandboxed by this class.
-    /// </param>
-    /// <param name="skills">Optional skills implemented directly in C#.</param>
+    /// <summary>Creates an agent connected to an Ollama server.</summary>
+    /// <param name="url">Ollama base URL, such as http://localhost:11434.</param>
+    /// <param name="modelName">Installed Ollama model name, such as qwen.</param>
+    /// <param name="skillFolders">Optional directories containing Agent Skills with SKILL.md files.</param>
+    /// <param name="enableSkillScripts">Enables subprocess execution for file-based skill scripts. Only use with trusted skill folders.</param>
+    /// <param name="skills">Optional C# skill instances.</param>
+    /// <param name="customSkillAssemblies">Optional explicitly selected assemblies to scan for [CustomSkill] classes. Assemblies are not scanned implicitly.</param>
     public OllamaAgent(
         string url,
         string modelName,
         string[]? skillFolders = null,
         bool enableSkillScripts = false,
-        IEnumerable<AgentSkill>? skills = null)
+        IEnumerable<AgentSkill>? skills = null,
+        IEnumerable<Assembly>? customSkillAssemblies = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelName);
@@ -39,7 +35,6 @@ public sealed class OllamaAgent : IDisposable
             throw new ArgumentException("The Ollama URL must be an absolute HTTP or HTTPS URL.", nameof(url));
         }
 
-        IChatClient chatClient = new OllamaApiClient(endpoint, modelName);
         var options = new ChatClientAgentOptions
         {
             Name = "POC_LIB_AI",
@@ -49,12 +44,11 @@ public sealed class OllamaAgent : IDisposable
             },
         };
 
+        var contextProviders = new List<AIContextProvider>();
         string[] folders = skillFolders?
             .Where(folder => !string.IsNullOrWhiteSpace(folder))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray() ?? [];
-
-        var contextProviders = new List<AIContextProvider>();
 
         if (folders.Length > 0)
         {
@@ -67,14 +61,19 @@ public sealed class OllamaAgent : IDisposable
             contextProviders.Add(fileSkillsProvider);
         }
 
-        AgentSkill[] inlineSkills = skills?.ToArray() ?? [];
-        if (inlineSkills.Length > 0)
+        var allSkills = skills?.ToList() ?? [];
+        if (customSkillAssemblies is not null)
+        {
+            allSkills.AddRange(CustomSkillDiscovery.DiscoverSkillsFromAssemblies(customSkillAssemblies));
+        }
+
+        if (allSkills.Count > 0)
         {
 #pragma warning disable MEAI001 // AgentSkillsProvider is experimental in Microsoft Agent Framework.
-            var inlineSkillsProvider = new AgentSkillsProvider(inlineSkills);
+            var codeSkillsProvider = new AgentSkillsProvider(allSkills);
 #pragma warning restore MEAI001
-            _skillsProviders.Add(inlineSkillsProvider);
-            contextProviders.Add(inlineSkillsProvider);
+            _skillsProviders.Add(codeSkillsProvider);
+            contextProviders.Add(codeSkillsProvider);
         }
 
         if (contextProviders.Count > 0)
@@ -82,17 +81,13 @@ public sealed class OllamaAgent : IDisposable
             options.AIContextProviders = contextProviders;
         }
 
-        Agent = chatClient.AsAIAgent(options);
+        Agent = new OllamaApiClient(endpoint, modelName).AsAIAgent(options);
     }
 
-    /// <summary>
-    /// Gets the configured Microsoft Agent Framework agent.
-    /// </summary>
+    /// <summary>Gets the configured Microsoft Agent Framework agent.</summary>
     public AIAgent Agent { get; }
 
-    /// <summary>
-    /// Releases the resources used by the skill providers.
-    /// </summary>
+    /// <summary>Disposes skill providers created by this wrapper.</summary>
     public void Dispose()
     {
         if (_disposed)
