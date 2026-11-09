@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
     <PackageReference Include="Microsoft.Agents.AI" Version="1.23.0" />
     <PackageReference Include="OllamaSharp" Version="5.4.30" />
   </ItemGroup>

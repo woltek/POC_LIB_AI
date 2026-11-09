@@ -1,6 +1,24 @@
 # POC_LIB_AI
 
-A small WPF library project using Microsoft Agent Framework. It includes a local Ollama agent wrapper and examples of file-based and C#-defined skills.
+A small WPF library project using WPF-UI and Microsoft Agent Framework. It includes a local Ollama agent wrapper, examples of file-based and C#-defined skills, and an opt-in assistant chat overlay for WPF windows.
+
+## Add an assistant chat to a window
+
+Create your agent as usual, then opt individual windows in. The assistant button and right-side chat panel are added to the window's client area:
+
+```csharp
+using POC_LIB_AI;
+
+var localAgent = new OllamaAgent("http://localhost:11434", "qwen");
+WindowAssistant.SetAgent(MainWindow, localAgent.Agent);
+WindowAssistant.SetIsEnabled(MainWindow, true);
+```
+
+Keep `localAgent` alive for as long as the window uses it, and dispose it when the application is finished with it. Set `IsEnabled` to `false` to remove the overlay.
+
+This works with ordinary WPF windows without changing their chrome. Windows' native minimize/maximize/close buttons cannot be extended by a normal WPF control; the chat button is therefore placed at the top-right of the window's client area. To put it in the actual title bar, the host application must opt into custom window chrome and provide a title-bar slot.
+
+The chat overlay uses the configured Microsoft `AIAgent`. Agent responses are currently sent as independent requests; thread/conversation memory can be added when the host application's agent/thread lifetime is defined.
 
 ## Local Ollama agent
 
