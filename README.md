@@ -1,6 +1,6 @@
 # POC_LIB_AI
 
-A small WPF library project using [WPF-UI](https://github.com/lepoco/wpfui) and Microsoft Agent Framework. It includes a local Ollama agent wrapper and examples of file-based and C#-defined skills.
+A small WPF library project using Microsoft Agent Framework. It includes a local Ollama agent wrapper and examples of file-based and C#-defined skills.
 
 ## Local Ollama agent
 
@@ -19,7 +19,7 @@ Console.WriteLine(response.Text);
 
 ## Discover C# skills with `[CustomSkill]`
 
-Mark a concrete `AgentSkill` class with `[CustomSkill("description")]`. It must have a parameterless constructor. The attribute description must exactly match `AgentSkill.Frontmatter.Description`, which is the description the Agent Framework exposes to the model. Skills are only discovered in assemblies you explicitly provide; the library does not scan every loaded assembly.
+Mark a concrete `AgentSkill` class with `[CustomSkill("description")]`. It must have a parameterless constructor. The attribute description must exactly match `AgentSkill.Frontmatter.Description`, and the skill must derive from `AgentSkill`. Pass the assembly explicitly to `OllamaAgent` to discover its marked skills.
 
 The repository's sample skills are nested in `SampleSkills`:
 
@@ -42,7 +42,7 @@ The sample assembly contains two marked skills:
 
 ### Skills from another project or library
 
-Reference the project/package that defines the custom skill, then pass that skill's assembly. The external skill class should be public, concrete, derive from `AgentSkill` (commonly `AgentClassSkill<TSelf>`), be marked with the library's `CustomSkillAttribute`, and have a parameterless constructor.
+Reference the project/package that defines the custom skill, then pass that skill's assembly. The external skill class should be public, concrete, derive from `AgentSkill` (commonly `AgentClassSkill<TSkill>`), have a parameterless constructor, and use matching descriptions for `[CustomSkill]` and `Frontmatter`.
 
 ```csharp
 using POC_LIB_AI;
@@ -82,7 +82,7 @@ public sealed class CustomerLookupSkill : AgentClassSkill<CustomerLookupSkill>
 }
 ```
 
-The custom skill project needs references to this library and the Microsoft Agent Framework package/API used by its skill classes. Pass only assemblies you trust: discovery instantiates marked types, and the skill scripts execute application code with the application's permissions.
+The custom skill project needs references to this library and the Microsoft Agent Framework package/API used by its skill classes. Pass only assemblies you trust: discovery instantiates marked types.
 
 ## File-based skills
 
