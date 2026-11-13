@@ -74,10 +74,12 @@ public static class WindowAssistant
         private readonly Grid _overlay;
         private readonly UIElement _originalContent;
         private readonly Button _toggleButton;
+        private readonly Button _sendButton;
         private readonly Border _chatPanel;
         private readonly StackPanel _messages;
         private readonly ScrollViewer _scrollViewer;
         private readonly TextBox _input;
+        private Border? _thinkingMessage;
         private bool _isSending;
 
         public AssistantHost(Window window, AIAgent? agent)
@@ -92,15 +94,30 @@ public static class WindowAssistant
                 ?? new ContentPresenter { Content = content };
 
             _overlay = new Grid();
+
             _toggleButton = new Button
             {
-                Content = "Chat",
-                Padding = new Thickness(10, 5, 10, 5),
-                Margin = new Thickness(0, 8, 12, 0),
+                Content = new TextBlock
+                {
+                    Text = "💬",
+                    FontSize = 18,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+                Width = 42,
+                Height = 42,
+                Margin = new Thickness(0, 10, 12, 0),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Top,
-                ToolTip = "Open assistant chat",
-                MinWidth = 64,
+                ToolTip = "Ouvrir l'assistant",
+                Background = new SolidColorBrush(Color.FromRgb(49, 117, 255)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(14),
             };
             _toggleButton.Click += (_, _) => TogglePanel();
 
@@ -109,40 +126,72 @@ public static class WindowAssistant
             {
                 Content = _messages,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Background = Brushes.Transparent,
             };
 
             _input = new TextBox
             {
-                MinHeight = 34,
+                MinHeight = 38,
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Margin = new Thickness(0, 0, 8, 0),
+                Padding = new Thickness(10),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(210, 218, 230)),
+                BorderThickness = new Thickness(1),
+                Background = Brushes.White,
             };
             _input.KeyDown += OnInputKeyDown;
 
-            var sendButton = new Button
+            _sendButton = new Button
             {
-                Content = "Send",
-                Padding = new Thickness(12, 5, 12, 5),
+                Content = new TextBlock
+                {
+                    Text = "➤",
+                    FontSize = 18,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+                Width = 40,
+                Height = 40,
                 VerticalAlignment = VerticalAlignment.Bottom,
+                Background = new SolidColorBrush(Color.FromRgb(34, 197, 94)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(12),
+                ToolTip = "Envoyer",
             };
-            sendButton.Click += async (_, _) => await SendAsync();
+            _sendButton.Click += async (_, _) => await SendAsync();
 
             var composer = new DockPanel { Margin = new Thickness(12) };
-            DockPanel.SetDock(sendButton, Dock.Right);
-            composer.Children.Add(sendButton);
+            DockPanel.SetDock(_sendButton, Dock.Right);
+            composer.Children.Add(_sendButton);
             composer.Children.Add(_input);
 
             var closeButton = new Button
             {
-                Content = "×",
-                FontSize = 20,
-                Padding = new Thickness(8, 0, 8, 0),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                ToolTip = "Close assistant chat",
+                Content = new TextBlock
+                {
+                    Text = "✕",
+                    FontSize = 15,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(92, 99, 112)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+                Width = 30,
+                Height = 30,
+                Padding = new Thickness(0),
+                BorderThickness = new Thickness(0),
+                Background = Brushes.Transparent,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Fermer l'assistant",
             };
-            closeButton.Click += (_, _) => _chatPanel.Visibility = Visibility.Collapsed;
+            closeButton.Click += (_, _) => ClosePanel();
 
             var title = new Grid { Margin = new Thickness(14, 10, 8, 8) };
             title.ColumnDefinitions.Add(new ColumnDefinition());
@@ -153,6 +202,7 @@ public static class WindowAssistant
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.FromRgb(27, 39, 59)),
             });
             Grid.SetColumn(closeButton, 1);
             title.Children.Add(closeButton);
@@ -170,7 +220,6 @@ public static class WindowAssistant
             _chatPanel = new Border
             {
                 Width = 360,
-                Margin = new Thickness(0, 0, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Stretch,
                 Background = Brushes.White,
@@ -178,9 +227,9 @@ public static class WindowAssistant
                 BorderThickness = new Thickness(1, 0, 0, 0),
                 Effect = new System.Windows.Media.Effects.DropShadowEffect
                 {
-                    BlurRadius = 12,
+                    BlurRadius = 14,
                     ShadowDepth = 0,
-                    Opacity = 0.18,
+                    Opacity = 0.22,
                 },
                 Child = panelLayout,
                 Visibility = Visibility.Collapsed,
@@ -191,6 +240,9 @@ public static class WindowAssistant
             _overlay.Children.Add(_chatPanel);
             Panel.SetZIndex(_toggleButton, 2);
             _overlay.Children.Add(_toggleButton);
+
+            UpdateToggleButtonState(false);
+            UpdateSendButtonState();
         }
 
         public AIAgent? Agent { get; set; }
@@ -209,8 +261,62 @@ public static class WindowAssistant
         {
             bool open = _chatPanel.Visibility != Visibility.Visible;
             _chatPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-            _toggleButton.Content = open ? "Close chat" : "Chat";
-            _toggleButton.ToolTip = open ? "Close assistant chat" : "Open assistant chat";
+            UpdateToggleButtonState(open);
+        }
+
+        private void ClosePanel()
+        {
+            _chatPanel.Visibility = Visibility.Collapsed;
+            UpdateToggleButtonState(false);
+        }
+
+        private void UpdateToggleButtonState(bool open)
+        {
+            _toggleButton.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+            if (open)
+            {
+                _toggleButton.ToolTip = "Fermer l'assistant";
+                _toggleButton.Content = new TextBlock
+                {
+                    Text = "✕",
+                    FontSize = 18,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+            }
+            else
+            {
+                _toggleButton.ToolTip = "Ouvrir l'assistant";
+                _toggleButton.Content = new TextBlock
+                {
+                    Text = "💬",
+                    FontSize = 18,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+            }
+        }
+
+        private void UpdateSendButtonState()
+        {
+            _sendButton.IsEnabled = !_isSending;
+            _sendButton.Background = _isSending
+                ? new SolidColorBrush(Color.FromRgb(156, 163, 175))
+                : new SolidColorBrush(Color.FromRgb(34, 197, 94));
+            _sendButton.ToolTip = _isSending ? "Réflexion en cours..." : "Envoyer";
+            _sendButton.Content = new TextBlock
+            {
+                Text = _isSending ? "…" : "➤",
+                FontSize = _isSending ? 16 : 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
         }
 
         private async void OnInputKeyDown(object sender, System.Windows.Input.KeyEventArgs args)
@@ -233,54 +339,146 @@ public static class WindowAssistant
 
             if (Agent is null)
             {
-                AddMessage("Assistant", "No agent is configured for this window.");
+                AddMessage("Assistant", "Aucun agent n'est configuré pour cette fenêtre.");
                 return;
             }
 
             _input.Clear();
-            AddMessage("You", prompt);
+            AddMessage("Vous", prompt);
             _isSending = true;
             _input.IsEnabled = false;
+            UpdateSendButtonState();
+            ShowThinkingMessage();
 
             try
             {
                 var response = await Agent.RunAsync(prompt);
+                HideThinkingMessage();
                 AddMessage("Assistant", response.Text ?? string.Empty);
             }
             catch (Exception exception)
             {
-                AddMessage("Assistant", $"Request failed: {exception.Message}");
+                HideThinkingMessage();
+                AddMessage("Assistant", $"Échec de la requête : {exception.Message}");
             }
             finally
             {
                 _isSending = false;
                 _input.IsEnabled = true;
+                UpdateSendButtonState();
                 _input.Focus();
             }
         }
 
+        private void ShowThinkingMessage()
+        {
+            if (_thinkingMessage is not null)
+            {
+                return;
+            }
+
+            var bubble = new Border
+            {
+                Margin = new Thickness(0, 0, 0, 10),
+                Padding = new Thickness(10),
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Color.FromRgb(250, 250, 251)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(226, 232, 240)),
+                BorderThickness = new Thickness(1),
+                Child = new TextBlock
+                {
+                    Text = "Réflexion en cours...",
+                    FontStyle = FontStyles.Italic,
+                    Foreground = new SolidColorBrush(Color.FromRgb(90, 98, 108)),
+                    TextWrapping = TextWrapping.Wrap,
+                },
+            };
+
+            _thinkingMessage = bubble;
+            _messages.Children.Add(bubble);
+            _scrollViewer.ScrollToEnd();
+        }
+
+        private void HideThinkingMessage()
+        {
+            if (_thinkingMessage is null)
+            {
+                return;
+            }
+
+            _messages.Children.Remove(_thinkingMessage);
+            _thinkingMessage = null;
+        }
+
         private void AddMessage(string speaker, string text)
         {
+            var label = NormalizeSpeaker(speaker);
+            var timestamp = DateTime.Now.ToString("dd/MM HH:mm");
+
+            var header = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var speakerText = new TextBlock
+            {
+                Text = label,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = speaker == "Assistant"
+                    ? new SolidColorBrush(Color.FromRgb(34, 40, 49))
+                    : new SolidColorBrush(Color.FromRgb(38, 89, 168)),
+            };
+
+            var timestampText = new TextBlock
+            {
+                Text = timestamp,
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Color.FromRgb(110, 118, 129)),
+                Margin = new Thickness(8, 0, 0, 0),
+            };
+
+            header.Children.Add(speakerText);
+            Grid.SetColumn(timestampText, 1);
+            header.Children.Add(timestampText);
+
             var message = new Border
             {
                 Margin = new Thickness(0, 0, 0, 10),
                 Padding = new Thickness(10),
-                CornerRadius = new CornerRadius(6),
-                Background = speaker == "You"
-                    ? new SolidColorBrush(Color.FromRgb(235, 243, 255))
-                    : new SolidColorBrush(Color.FromRgb(245, 245, 245)),
+                CornerRadius = new CornerRadius(8),
+                Background = speaker == "Vous"
+                    ? new SolidColorBrush(Color.FromRgb(235, 245, 255))
+                    : new SolidColorBrush(Color.FromRgb(245, 247, 250)),
+                BorderBrush = speaker == "Vous"
+                    ? new SolidColorBrush(Color.FromRgb(201, 224, 255))
+                    : new SolidColorBrush(Color.FromRgb(228, 232, 240)),
+                BorderThickness = new Thickness(1),
                 Child = new StackPanel
                 {
                     Children =
                     {
-                        new TextBlock { Text = speaker, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) },
-                        new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
+                        header,
+                        new TextBlock
+                        {
+                            Text = text,
+                            TextWrapping = TextWrapping.Wrap,
+                            Foreground = new SolidColorBrush(Color.FromRgb(32, 39, 47)),
+                        },
                     },
                 },
             };
 
             _messages.Children.Add(message);
             _scrollViewer.ScrollToEnd();
+        }
+
+        private static string NormalizeSpeaker(string speaker)
+        {
+            return speaker switch
+            {
+                "Vous" => "Vous",
+                "Assistant" => "Assistant",
+                _ => speaker,
+            };
         }
     }
 }
