@@ -85,10 +85,8 @@ public sealed class OllamaAgent : IDisposable
             .AsBuilder()
             .UseToolApproval(new ToolApprovalAgentOptions
             {
-                AutoApprovalRules =
-                [
-                    AgentSkillsProvider.AllToolsAutoApprovalRule
-                ]
+                // Reading skill metadata/resources is non-mutating; running a skill script still asks the user.
+                AutoApprovalRules = [AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule],
             })
             .Build();
     }
