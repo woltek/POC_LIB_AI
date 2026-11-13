@@ -1,10 +1,10 @@
 # POC_LIB_AI
 
-A small WPF library project using WPF-UI and Microsoft Agent Framework. It includes a local Ollama agent wrapper, examples of file-based and C#-defined skills, and an opt-in assistant chat overlay for WPF windows.
+Petite bibliothèque WPF utilisant WPF-UI et Microsoft Agent Framework. Elle comprend un wrapper pour un agent Ollama local, des exemples de compétences définies dans des fichiers et en C#, ainsi qu'un panneau de discussion d'assistant intégrable à la demande dans une fenêtre.
 
-## Add an assistant chat to a window
+## Ajouter un assistant conversationnel à une fenêtre
 
-Create your agent as usual, then opt individual windows in. The assistant button and right-side chat panel are added to the window's client area:
+Créez votre agent comme d'habitude, puis activez l'assistant pour les fenêtres souhaitées. Le bouton de l'assistant et le panneau de discussion latéral sont ajoutés à la zone cliente de la fenêtre :
 
 ```csharp
 using POC_LIB_AI;
@@ -14,15 +14,15 @@ WindowAssistant.SetAgent(MainWindow, localAgent.Agent);
 WindowAssistant.SetIsEnabled(MainWindow, true);
 ```
 
-Keep `localAgent` alive for as long as the window uses it, and dispose it when the application is finished with it. Set `IsEnabled` to `false` to remove the overlay.
+Conservez `localAgent` tant que la fenêtre l'utilise et libérez-le lorsque l'application n'en a plus besoin. Définissez `IsEnabled` sur `false` pour retirer le panneau.
 
-This works with ordinary WPF windows without changing their chrome. Windows' native minimize/maximize/close buttons cannot be extended by a normal WPF control; the chat button is therefore placed at the top-right of the window's client area. To put it in the actual title bar, the host application must opt into custom window chrome and provide a title-bar slot.
+Cette solution fonctionne avec les fenêtres WPF ordinaires, sans modifier leur barre de titre. Les boutons natifs Windows de réduction, d'agrandissement et de fermeture ne peuvent pas être étendus par un contrôle WPF standard ; le bouton de discussion est donc placé dans la zone cliente de la fenêtre.
 
-The chat overlay uses the configured Microsoft `AIAgent`. Agent responses are currently sent as independent requests; thread/conversation memory can be added when the host application's agent/thread lifetime is defined.
+Le panneau de discussion utilise l'`AIAgent` Microsoft configuré. Pour le moment, chaque réponse de l'agent est envoyée comme une requête indépendante ; la mémoire des conversations pourra être ajoutée si l'application hôte gère un fil de discussion.
 
-## Local Ollama agent
+## Agent Ollama local
 
-Start Ollama and make sure the model you want is installed (for example, `ollama pull qwen`). Then create the agent:
+Démarrez Ollama et vérifiez que le modèle souhaité est installé (par exemple, `ollama pull qwen`). Créez ensuite l'agent :
 
 ```csharp
 using POC_LIB_AI;
@@ -35,11 +35,11 @@ var response = await localAgent.Agent.RunAsync("Say hello in French.");
 Console.WriteLine(response.Text);
 ```
 
-## Discover C# skills with `[CustomSkill]`
+## Découvrir les compétences C# avec `[CustomSkill]`
 
-Mark a concrete `AgentSkill` class with `[CustomSkill("description")]`. It must have a parameterless constructor. The attribute description must exactly match `AgentSkill.Frontmatter.Description`, and the skill must derive from `AgentSkill`. Pass the assembly explicitly to `OllamaAgent` to discover its marked skills.
+Ajoutez l'attribut `[CustomSkill("description")]` à une classe concrète dérivée de `AgentSkill`. La classe doit disposer d'un constructeur sans paramètre. La description de l'attribut doit correspondre exactement à `AgentSkill.Frontmatter.Description` ; les compétences sont alors découvertes dans l'assembly fourni à l'agent.
 
-The repository's sample skills are nested in `SampleSkills`:
+Les compétences d'exemple du dépôt sont imbriquées dans `SampleSkills` :
 
 ```csharp
 using POC_LIB_AI;
@@ -53,14 +53,14 @@ var response = await localAgent.Agent.RunAsync(
     "Show a popup that says Hello from the assistant.");
 ```
 
-The sample assembly contains two marked skills:
+L'assembly d'exemple contient deux compétences annotées :
 
-- `SampleSkills.BackendConsole` provides a `log-message` script that writes to `Console.WriteLine` when explicitly requested.
-- `SampleSkills.UiMessageBox` provides a `show-message` script that displays a WPF `MessageBox` on the application's dispatcher when explicitly requested.
+- `SampleSkills.BackendConsole` fournit le script `log-message`, qui écrit dans `Console.WriteLine` lorsque l'utilisateur le demande explicitement.
+- `SampleSkills.UiMessageBox` fournit le script `show-message`, qui affiche une boîte de dialogue WPF sur le répartiteur de l'application lorsque l'utilisateur le demande explicitement.
 
-### Skills from another project or library
+### Compétences provenant d'un autre projet ou d'une bibliothèque
 
-Reference the project/package that defines the custom skill, then pass that skill's assembly. The external skill class should be public, concrete, derive from `AgentSkill` (commonly `AgentClassSkill<TSkill>`), have a parameterless constructor, and use matching descriptions for `[CustomSkill]` and `Frontmatter`.
+Référencez le projet ou le package qui définit la compétence personnalisée, puis transmettez l'assembly correspondant. La classe de compétence externe doit être publique, concrète et dérivée de `AgentSkill` (généralement via `AgentClassSkill<T>`). Elle doit aussi respecter les exigences de l'API Microsoft Agent Framework utilisée par le projet.
 
 ```csharp
 using POC_LIB_AI;
@@ -72,7 +72,7 @@ using var localAgent = new OllamaAgent(
     customSkillAssemblies: [typeof(CustomerLookupSkill).Assembly]);
 ```
 
-A skill in the referenced project can look like this:
+Une compétence dans le projet référencé peut ressembler à ceci :
 
 ```csharp
 using System.ComponentModel;
@@ -94,17 +94,17 @@ public sealed class CustomerLookupSkill : AgentClassSkill<CustomerLookupSkill>
     [Description("Looks up a customer by identifier.")]
     private static string LookupCustomer(string customerId)
     {
-        // Call the application's own service here.
+        // Appelez ici le service propre à l'application.
         return $"Customer lookup requested for {customerId}.";
     }
 }
 ```
 
-The custom skill project needs references to this library and the Microsoft Agent Framework package/API used by its skill classes. Pass only assemblies you trust: discovery instantiates marked types.
+Le projet de compétences personnalisées doit référencer cette bibliothèque ainsi que le package ou l'API Microsoft Agent Framework utilisé par ses classes de compétences. Ne transmettez que des assemblies de confiance : la découverte instancie les types portant l'attribut.
 
-## File-based skills
+## Compétences définies dans des fichiers
 
-You can also provide directories containing Agent Skills. Each skill should be in its own subfolder and include a `SKILL.md` file:
+Vous pouvez également fournir des répertoires contenant des compétences Agent Skills. Chaque compétence doit se trouver dans son propre sous-dossier et inclure un fichier `SKILL.md` :
 
 ```csharp
 using var localAgent = new OllamaAgent(
@@ -113,7 +113,7 @@ using var localAgent = new OllamaAgent(
     skillFolders: [@"C:\AI\skills", @"C:\project\custom-skills"]);
 ```
 
-File-based skill scripts run as local subprocesses and are disabled by default. Enable them only for trusted skill folders:
+Les scripts des compétences définies dans des fichiers sont exécutés dans des sous-processus locaux et sont désactivés par défaut. Ne les activez que pour des répertoires de compétences de confiance :
 
 ```csharp
 using var localAgent = new OllamaAgent(
@@ -123,9 +123,9 @@ using var localAgent = new OllamaAgent(
     enableSkillScripts: true);
 ```
 
-## Supply skill instances directly
+## Fournir directement des instances de compétences
 
-For dependency-injected skills or skills that do not have a parameterless constructor, create the instances yourself and pass them through `skills` instead of assembly discovery:
+Pour les compétences utilisant l'injection de dépendances ou ne disposant pas d'un constructeur sans paramètre, créez vous-même les instances et transmettez-les via `skills` au lieu de les découvrir à partir d'un assembly :
 
 ```csharp
 IEnumerable<AgentSkill> skills = [CreateSkill(myService)];
@@ -135,8 +135,8 @@ using var localAgent = new OllamaAgent(
     skills: skills);
 ```
 
-C# skills and file-based skills can be used together. Avoid duplicate skill names across registered sources.
+Les compétences C# et celles définies dans des fichiers peuvent être utilisées ensemble. Évitez les noms de compétences en double parmi les différentes sources enregistrées.
 
-## Safety note
+## Note de sécurité
 
-Skills can cause side effects. Keep their instructions specific and include only skills you trust. The sample UI skill can open a message box, and custom scripts run with the application's permissions.
+Les compétences peuvent entraîner des effets de bord. Rédigez des instructions précises et n'incluez que des compétences de confiance. La compétence d'interface fournie en exemple peut ouvrir une boîte de dialogue, et les scripts personnalisés s'exécutent avec les autorisations de l'application.
