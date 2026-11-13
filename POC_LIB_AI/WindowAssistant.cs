@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace POC_LIB_AI;
 
@@ -356,7 +357,8 @@ public static class WindowAssistant
 
             try
             {
-                var response = await Agent.RunAsync(prompt);
+                AgentResponse response = await Agent.RunAsync(prompt);
+                await HandleApprovalRequestsAsync(response);
                 AddMessage("Assistant", response.Text ?? string.Empty);
             }
             catch (Exception exception)
@@ -371,6 +373,173 @@ public static class WindowAssistant
                 UpdateSendButtonState();
                 _input.Focus();
             }
+        }
+
+        private async Task HandleApprovalRequestsAsync(AgentResponse response)
+        {
+            List<ToolApprovalRequestContent> approvalRequests = response.Messages
+                .SelectMany(message => message.Contents)
+                .OfType<ToolApprovalRequestContent>()
+                .ToList();
+
+            while (approvalRequests.Count > 0)
+            {
+                List<ChatMessage> userResponses = [];
+
+                foreach (ToolApprovalRequestContent request in approvalRequests)
+                {
+                    if (request.ToolCall is not FunctionCallContent toolCall)
+                    {
+                        userResponses.Add(new ChatMessage(ChatRole.User, [request.CreateResponse(approved: false, reason: "Instruction non prise en charge.") ]));
+                        continue;
+                    }
+
+                    string title = toolCall.Name;
+                    string details = GetToolCallSummary(toolCall);
+                    AddMessage("Assistant", $"Autorisation requise pour l'outil \"{title}\".\n{details}");
+
+                    bool approved = await ShowApprovalDialogAsync(title, details);
+                    userResponses.Add(new ChatMessage(
+                        ChatRole.User,
+                        [approved
+                            ? request.CreateResponse(approved: true)
+                            : request.CreateResponse(approved: false, reason: "L'utilisateur a refusé l'exécution de cet outil. Ne réessayez pas.") ]));
+                }
+
+                AgentResponse approvedResponse = await Agent!.RunAsync(userResponses);
+                approvalRequests = approvedResponse.Messages
+                    .SelectMany(message => message.Contents)
+                    .OfType<ToolApprovalRequestContent>()
+                    .ToList();
+
+                if (!string.IsNullOrWhiteSpace(approvedResponse.Text))
+                {
+                    AddMessage("Assistant", approvedResponse.Text);
+                }
+            }
+        }
+
+        private async Task<bool> ShowApprovalDialogAsync(string toolName, string details)
+        {
+            var completion = new TaskCompletionSource<bool>();
+            var dialog = new Window
+            {
+                Title = "Autoriser l'outil ?",
+                Width = 430,
+                Height = 240,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = _window,
+                ShowInTaskbar = false,
+                Topmost = true,
+            };
+
+            var stack = new StackPanel { Margin = new Thickness(16) };
+            var summary = new TextBlock
+            {
+                Text = $"L'assistant souhaite exécuter l'outil : {toolName}",
+                FontSize = 15,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12),
+            };
+
+            var info = new TextBlock
+            {
+                Text = details,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 16),
+                Foreground = new SolidColorBrush(Color.FromRgb(50, 60, 72)),
+            };
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 6, 0, 0),
+            };
+
+            var allowButton = new Button
+            {
+                Content = "Autoriser",
+                Width = 110,
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = new SolidColorBrush(Color.FromRgb(34, 197, 94)),
+                Foreground = Brushes.White,
+                Padding = new Thickness(10, 6, 10, 6),
+            };
+
+            var denyButton = new Button
+            {
+                Content = "Refuser",
+                Width = 110,
+                Padding = new Thickness(10, 6, 10, 6),
+            };
+
+            allowButton.Click += (_, _) =>
+            {
+                completion.TrySetResult(true);
+                dialog.Close();
+            };
+
+            denyButton.Click += (_, _) =>
+            {
+                completion.TrySetResult(false);
+                dialog.Close();
+            };
+
+            buttons.Children.Add(allowButton);
+            buttons.Children.Add(denyButton);
+            stack.Children.Add(summary);
+            stack.Children.Add(info);
+            stack.Children.Add(buttons);
+            dialog.Content = stack;
+
+            dialog.Closed += (_, _) =>
+            {
+                if (!completion.Task.IsCompleted)
+                {
+                    completion.TrySetResult(false);
+                }
+            };
+
+            dialog.ShowDialog();
+            return await completion.Task;
+        }
+
+        private static string GetToolCallSummary(FunctionCallContent toolCall)
+        {
+            if (toolCall.Arguments is null || toolCall.Arguments.Count == 0)
+            {
+                return "Aucun argument.";
+            }
+
+            var parts = toolCall.Arguments
+                .Select(kvp => $"{kvp.Key}: {FormatToolArgumentValue(kvp.Value)}")
+                .ToArray();
+
+            return string.Join(Environment.NewLine, parts);
+        }
+
+        private static string FormatToolArgumentValue(object? value)
+        {
+            if (value is null)
+            {
+                return "null";
+            }
+
+            if (value is string s)
+            {
+                return s;
+            }
+
+            if (value is System.Collections.IEnumerable enumerable && value is not string)
+            {
+                return string.Join(", ", enumerable.Cast<object?>().Select(FormatToolArgumentValue));
+            }
+
+            return value.ToString() ?? string.Empty;
         }
 
         private void ShowThinkingMessage()
