@@ -86,12 +86,14 @@ public static class WindowAssistant
         private TextBlock? _thinkingText;
         private DispatcherTimer? _thinkingTimer;
         private Stopwatch? _thinkingStopwatch;
+        private AgentSession? _session;
+        private AIAgent? _agent;
         private bool _isSending;
 
         public AssistantHost(Window window, AIAgent? agent)
         {
             _window = window;
-            Agent = agent;
+            _agent = agent;
 
             object? content = window.Content;
             window.Content = null;
@@ -249,7 +251,20 @@ public static class WindowAssistant
             UpdateSendButtonState();
         }
 
-        public AIAgent? Agent { get; set; }
+        public AIAgent? Agent
+        {
+            get => _agent;
+            set
+            {
+                if (ReferenceEquals(_agent, value))
+                {
+                    return;
+                }
+
+                _agent = value;
+                _session = null;
+            }
+        }
 
         public void Attach()
         {
@@ -357,9 +372,18 @@ public static class WindowAssistant
 
             try
             {
-                AgentResponse response = await Agent.RunAsync(prompt);
-                await HandleApprovalRequestsAsync(response);
-                AddMessage("Assistant", response.Text ?? string.Empty);
+                AIAgent agent = Agent;
+                _session ??= await agent.CreateSessionAsync();
+
+                // Reuse one session for user turns and approval responses so the agent retains
+                // the original request and tool-call context while resuming after approval.
+                AgentResponse response = await agent.RunAsync(prompt, _session);
+                response = await HandleApprovalRequestsAsync(agent, _session, response);
+
+                if (!string.IsNullOrWhiteSpace(response.Text))
+                {
+                    AddMessage("Assistant", response.Text);
+                }
             }
             catch (Exception exception)
             {
@@ -375,12 +399,12 @@ public static class WindowAssistant
             }
         }
 
-        private async Task HandleApprovalRequestsAsync(AgentResponse response)
+        private async Task<AgentResponse> HandleApprovalRequestsAsync(
+            AIAgent agent,
+            AgentSession session,
+            AgentResponse response)
         {
-            List<ToolApprovalRequestContent> approvalRequests = response.Messages
-                .SelectMany(message => message.Contents)
-                .OfType<ToolApprovalRequestContent>()
-                .ToList();
+            List<ToolApprovalRequestContent> approvalRequests = GetApprovalRequests(response);
 
             while (approvalRequests.Count > 0)
             {
@@ -390,34 +414,33 @@ public static class WindowAssistant
                 {
                     if (request.ToolCall is not FunctionCallContent toolCall)
                     {
-                        userResponses.Add(new ChatMessage(ChatRole.User, [request.CreateResponse(approved: false, reason: "Instruction non prise en charge.") ]));
+                        userResponses.Add(new ChatMessage(
+                            ChatRole.User,
+                            [request.CreateResponse(approved: false, reason: "Instruction non prise en charge.")]));
                         continue;
                     }
 
-                    string title = toolCall.Name;
                     string details = GetToolCallSummary(toolCall);
-                    AddMessage("Assistant", $"Autorisation requise pour l'outil \"{title}\".\n{details}");
-
-                    bool approved = await ShowApprovalDialogAsync(title, details);
+                    bool approved = await ShowApprovalDialogAsync(toolCall.Name, details);
                     userResponses.Add(new ChatMessage(
                         ChatRole.User,
                         [approved
                             ? request.CreateResponse(approved: true)
-                            : request.CreateResponse(approved: false, reason: "L'utilisateur a refusé l'exécution de cet outil. Ne réessayez pas.") ]));
+                            : request.CreateResponse(approved: false, reason: "L'utilisateur a refusé l'exécution de cet outil. Ne réessayez pas.")]));
                 }
 
-                AgentResponse approvedResponse = await Agent!.RunAsync(userResponses);
-                approvalRequests = approvedResponse.Messages
-                    .SelectMany(message => message.Contents)
-                    .OfType<ToolApprovalRequestContent>()
-                    .ToList();
-
-                if (!string.IsNullOrWhiteSpace(approvedResponse.Text))
-                {
-                    AddMessage("Assistant", approvedResponse.Text);
-                }
+                // The approval response must be sent to the same session that produced the request.
+                response = await agent.RunAsync(userResponses, session);
+                approvalRequests = GetApprovalRequests(response);
             }
+
+            return response;
         }
+
+        private static List<ToolApprovalRequestContent> GetApprovalRequests(AgentResponse response) => response.Messages
+            .SelectMany(message => message.Contents)
+            .OfType<ToolApprovalRequestContent>()
+            .ToList();
 
         private async Task<bool> ShowApprovalDialogAsync(string toolName, string details)
         {
