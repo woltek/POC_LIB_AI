@@ -17,9 +17,9 @@ public static class SampleSkills
             "Write a short informational message to the application's backend console log when explicitly requested.");
 
         protected override string Instructions =>
-            "Use this skill only when the user explicitly asks you to log a message. Pass a concise, user-provided message to the log-message script.";
+            "Use this skill only when the user explicitly asks you to log a message. Pass a concise, user-provided message to the log_message script.";
 
-        [AgentSkillScript("log-message")]
+        [AgentSkillScript("log_message")]
         [Description("Writes the supplied message to the application's standard output log.")]
         private static string LogMessage(string message)
         {
@@ -38,9 +38,9 @@ public static class SampleSkills
             "Display a message box in the WPF application when the user explicitly requests a popup.");
 
         protected override string Instructions =>
-            "Use this skill only when the user explicitly asks to show a popup or message box. Pass concise text to the show-message script. Do not use it for ordinary replies.";
+            "Use this skill only when the user explicitly asks to show a popup or message box. Pass concise text to the show_message script. Do not use it for ordinary replies.";
 
-        [AgentSkillScript("show-message")]
+        [AgentSkillScript("show_message")]
         [Description("Displays the supplied text in a WPF message box on the UI thread.")]
         private static string ShowMessage(string message)
         {

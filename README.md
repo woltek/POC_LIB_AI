@@ -1,10 +1,10 @@
 # POC_LIB_AI
 
-Petite bibliothèque WPF utilisant WPF-UI et Microsoft Agent Framework. Elle comprend un wrapper pour un agent Ollama local, des exemples de compétences définies dans des fichiers et en C#, ainsi qu'un panneau de discussion d'assistant intégrable à la demande dans une fenêtre.
+Petite bibliothèque WPF utilisant WPF-UI et Microsoft Agent Framework. Elle comprend un wrapper pour un agent Ollama local, des exemples de compétences définies dans des fichiers et en C#, ainsi qu'un petit support pour le test de compétences d'interface utilisateur.
 
 ## Ajouter un assistant conversationnel à une fenêtre
 
-Créez votre agent comme d'habitude, puis activez l'assistant pour les fenêtres souhaitées. Le bouton de l'assistant et le panneau de discussion latéral sont ajoutés à la zone cliente de la fenêtre :
+Créez votre agent comme d'habitude, puis activez l'assistant pour les fenêtres souhaitées. Le bouton de l'assistant et le panneau de discussion latéral sont ajoutés à la zone cliente de la fenêtre.
 
 ```csharp
 using POC_LIB_AI;
@@ -16,9 +16,9 @@ WindowAssistant.SetIsEnabled(MainWindow, true);
 
 Conservez `localAgent` tant que la fenêtre l'utilise et libérez-le lorsque l'application n'en a plus besoin. Définissez `IsEnabled` sur `false` pour retirer le panneau.
 
-Cette solution fonctionne avec les fenêtres WPF ordinaires, sans modifier leur barre de titre. Les boutons natifs Windows de réduction, d'agrandissement et de fermeture ne peuvent pas être étendus par un contrôle WPF standard ; le bouton de discussion est donc placé dans la zone cliente de la fenêtre.
+Cette solution fonctionne avec les fenêtres WPF ordinaires, sans modifier leur barre de titre. Les boutons natifs Windows de réduction, d'agrandissement et de fermeture ne peuvent pas être éteints par cette bibliothèque.
 
-Le panneau de discussion utilise l'`AIAgent` Microsoft configuré. Pour le moment, chaque réponse de l'agent est envoyée comme une requête indépendante ; la mémoire des conversations pourra être ajoutée si l'application hôte gère un fil de discussion.
+Le panneau de discussion utilise l'`AIAgent` Microsoft configuré. Pour le moment, chaque réponse de l'agent est envoyée comme une requête indépendante ; la mémoire des conversations pourra être ajoutée plus tard.
 
 ## Agent Ollama local
 
@@ -55,8 +55,8 @@ var response = await localAgent.Agent.RunAsync(
 
 L'assembly d'exemple contient deux compétences annotées :
 
-- `SampleSkills.BackendConsole` fournit le script `log-message`, qui écrit dans `Console.WriteLine` lorsque l'utilisateur le demande explicitement.
-- `SampleSkills.UiMessageBox` fournit le script `show-message`, qui affiche une boîte de dialogue WPF sur le répartiteur de l'application lorsque l'utilisateur le demande explicitement.
+- `SampleSkills.BackendConsole` fournit le script `log_message`, qui écrit dans `Console.WriteLine` lorsque l'utilisateur le demande explicitement.
+- `SampleSkills.UiMessageBox` fournit le script `show_message`, qui affiche une boîte de dialogue WPF sur le répartiteur de l'application lorsque l'utilisateur le demande explicitement.
 
 ### Compétences provenant d'un autre projet ou d'une bibliothèque
 
@@ -90,7 +90,7 @@ public sealed class CustomerLookupSkill : AgentClassSkill<CustomerLookupSkill>
 
     protected override string Instructions => "Use this skill for customer lookups.";
 
-    [AgentSkillScript("lookup-customer")]
+    [AgentSkillScript("lookup_customer")]
     [Description("Looks up a customer by identifier.")]
     private static string LookupCustomer(string customerId)
     {
@@ -125,7 +125,7 @@ using var localAgent = new OllamaAgent(
 
 ## Fournir directement des instances de compétences
 
-Pour les compétences utilisant l'injection de dépendances ou ne disposant pas d'un constructeur sans paramètre, créez vous-même les instances et transmettez-les via `skills` au lieu de les découvrir à partir d'un assembly :
+Pour les compétences utilisant l'injection de dépendances ou ne disposant pas d'un constructeur sans paramètre, créez vous-même les instances et transmettez-les via `skills` au lieu de les découvrir automatiquement.
 
 ```csharp
 IEnumerable<AgentSkill> skills = [CreateSkill(myService)];
@@ -139,4 +139,4 @@ Les compétences C# et celles définies dans des fichiers peuvent être utilisé
 
 ## Note de sécurité
 
-Les compétences peuvent entraîner des effets de bord. Rédigez des instructions précises et n'incluez que des compétences de confiance. La compétence d'interface fournie en exemple peut ouvrir une boîte de dialogue, et les scripts personnalisés s'exécutent avec les autorisations de l'application.
+Les compétences peuvent entraîner des effets de bord. Rédigez des instructions précises et n'incluez que des compétences de confiance. La compétence d'interface fournie en exemple peut ouvrir des boîtes de dialogue WPF sur le thread UI ; vérifiez toujours les autorisations et les usages avant d'activer des compétences non fiables.
