@@ -81,7 +81,16 @@ public sealed class OllamaAgent : IDisposable
             options.AIContextProviders = contextProviders;
         }
 
-        Agent = new OllamaApiClient(endpoint, modelName).AsAIAgent(options);
+        Agent = new OllamaApiClient(endpoint, modelName).AsAIAgent(options)
+            .AsBuilder()
+            .UseToolApproval(new ToolApprovalAgentOptions
+            {
+                AutoApprovalRules =
+                [
+                    AgentSkillsProvider.AllToolsAutoApprovalRule
+                ]
+            })
+            .Build();
     }
 
     /// <summary>Gets the configured Microsoft Agent Framework agent.</summary>
