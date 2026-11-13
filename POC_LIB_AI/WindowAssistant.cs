@@ -117,7 +117,6 @@ public static class WindowAssistant
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Padding = new Thickness(0),
-                CornerRadius = new CornerRadius(14),
             };
             _toggleButton.Click += (_, _) => TogglePanel();
 
@@ -162,7 +161,6 @@ public static class WindowAssistant
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Padding = new Thickness(0),
-                CornerRadius = new CornerRadius(12),
                 ToolTip = "Envoyer",
             };
             _sendButton.Click += async (_, _) => await SendAsync();
