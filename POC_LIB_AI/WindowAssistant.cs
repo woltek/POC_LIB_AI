@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Agents.AI;
 
 namespace POC_LIB_AI;
@@ -80,6 +82,9 @@ public static class WindowAssistant
         private readonly ScrollViewer _scrollViewer;
         private readonly TextBox _input;
         private Border? _thinkingMessage;
+        private TextBlock? _thinkingText;
+        private DispatcherTimer? _thinkingTimer;
+        private Stopwatch? _thinkingStopwatch;
         private bool _isSending;
 
         public AssistantHost(Window window, AIAgent? agent)
@@ -252,6 +257,7 @@ public static class WindowAssistant
 
         public void Detach()
         {
+            _thinkingTimer?.Stop();
             _window.Content = _originalContent;
         }
 
@@ -351,16 +357,15 @@ public static class WindowAssistant
             try
             {
                 var response = await Agent.RunAsync(prompt);
-                HideThinkingMessage();
                 AddMessage("Assistant", response.Text ?? string.Empty);
             }
             catch (Exception exception)
             {
-                HideThinkingMessage();
                 AddMessage("Assistant", $"Échec de la requête : {exception.Message}");
             }
             finally
             {
+                HideThinkingMessage();
                 _isSending = false;
                 _input.IsEnabled = true;
                 UpdateSendButtonState();
@@ -375,6 +380,14 @@ public static class WindowAssistant
                 return;
             }
 
+            _thinkingText = new TextBlock
+            {
+                Text = "Réflexion en cours… 00:00",
+                FontStyle = FontStyles.Italic,
+                Foreground = new SolidColorBrush(Color.FromRgb(90, 98, 108)),
+                TextWrapping = TextWrapping.Wrap,
+            };
+
             var bubble = new Border
             {
                 Margin = new Thickness(0, 0, 0, 10),
@@ -383,22 +396,44 @@ public static class WindowAssistant
                 Background = new SolidColorBrush(Color.FromRgb(250, 250, 251)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(226, 232, 240)),
                 BorderThickness = new Thickness(1),
-                Child = new TextBlock
-                {
-                    Text = "Réflexion en cours...",
-                    FontStyle = FontStyles.Italic,
-                    Foreground = new SolidColorBrush(Color.FromRgb(90, 98, 108)),
-                    TextWrapping = TextWrapping.Wrap,
-                },
+                Child = _thinkingText,
             };
 
             _thinkingMessage = bubble;
             _messages.Children.Add(bubble);
             _scrollViewer.ScrollToEnd();
+
+            _thinkingStopwatch = Stopwatch.StartNew();
+            _thinkingTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1),
+            };
+            _thinkingTimer.Tick += (_, _) => UpdateThinkingElapsedTime();
+            _thinkingTimer.Start();
+        }
+
+        private void UpdateThinkingElapsedTime()
+        {
+            if (_thinkingText is null || _thinkingStopwatch is null)
+            {
+                return;
+            }
+
+            TimeSpan elapsed = _thinkingStopwatch.Elapsed;
+            string formattedTime = elapsed.TotalHours >= 1
+                ? $"{(int)elapsed.TotalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}"
+                : $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}";
+            _thinkingText.Text = $"Réflexion en cours… {formattedTime}";
         }
 
         private void HideThinkingMessage()
         {
+            _thinkingTimer?.Stop();
+            _thinkingTimer = null;
+            _thinkingStopwatch?.Stop();
+            _thinkingStopwatch = null;
+            _thinkingText = null;
+
             if (_thinkingMessage is null)
             {
                 return;
