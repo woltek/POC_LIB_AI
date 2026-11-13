@@ -85,8 +85,11 @@ public static class WindowAssistant
             _window = window;
             Agent = agent;
 
-            _originalContent = window.Content as UIElement
-                ?? new ContentPresenter { Content = window.Content };
+            object? content = window.Content;
+            window.Content = null;
+
+            _originalContent = content as UIElement
+                ?? new ContentPresenter { Content = content };
 
             _overlay = new Grid();
             _toggleButton = new Button
